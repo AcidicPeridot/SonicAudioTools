@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Text;
 using System.Threading.Tasks;
@@ -140,9 +141,23 @@ namespace AcbEditor
                         }
                     }
 
+                    Dictionary<int, string> cueNameDict = new Dictionary<int, string>();
+
+                    using (SubStream cueNameTableStream = acbReader.GetSubStream("CueNameTable"))
+                    using (CriTableReader cueNameReader = CriTableReader.Create(cueNameTableStream))
+                    { 
+                        while (cueNameReader.Read())
+                        {
+                            cueNameDict.Add(cueNameReader.GetUInt16("CueIndex"), cueNameReader.GetString("CueName"));
+                        }
+                    }
+
+                    int cueIndex = 0;
+
                     using (SubStream waveformTableStream = acbReader.GetSubStream("WaveformTable"))
                     using (CriTableReader waveformReader = CriTableReader.Create(waveformTableStream))
                     {
+
                         while (waveformReader.Read())
                         {
                             byte encodeType = waveformReader.GetByte("EncodeType");
@@ -153,7 +168,7 @@ namespace AcbEditor
                                 streaming ? waveformReader.GetUInt16("StreamAwbId") : waveformReader.GetUInt16("MemoryAwbId") :
                                 waveformReader.GetUInt16("Id");
 
-                            string outputName = id.ToString("D5");
+                            string outputName = cueNameDict[cueIndex];
                             if (streaming)
                             {
                                 outputName += "_streaming";
@@ -206,6 +221,8 @@ namespace AcbEditor
 
                                 extractor.Add(args[0], outputName, awbPosition + afs2Entry.Position, afs2Entry.Length);
                             }
+
+                            cueIndex++;
                         }
                     }
                 }
@@ -259,6 +276,18 @@ namespace AcbEditor
 
                 cpkMode = !(awbFile != null && awbFile.Length >= 4 && Encoding.ASCII.GetString(awbFile, 0, 4) == "AFS2") && (streamAwbAfs2Header == null || streamAwbAfs2Header.Length == 0);
 
+                Dictionary<int, string> cueNameDict = new Dictionary<int, string>();
+
+                using (CriTableReader cueNameReader = CriTableReader.Create((byte[])acbFile.Rows[0]["CueNameTable"]))
+                {
+                    while (cueNameReader.Read())
+                    {
+                        cueNameDict.Add(cueNameReader.GetUInt16("CueIndex"), cueNameReader.GetString("CueName"));
+                    }
+                }
+
+                int cueIndex = 0;
+
                 using (CriTableReader reader = CriTableReader.Create((byte[])acbFile.Rows[0]["WaveformTable"]))
                 {
                     while (reader.Read())
@@ -271,7 +300,7 @@ namespace AcbEditor
                             streaming ? reader.GetUInt16("StreamAwbId") : reader.GetUInt16("MemoryAwbId") : 
                             reader.GetUInt16("Id");
 
-                        string inputName = id.ToString("D5");
+                        string inputName = cueNameDict[cueIndex];
                         if (streaming)
                         {
                             inputName += "_streaming";
@@ -318,7 +347,10 @@ namespace AcbEditor
                                 afs2Archive.Add(entry);
                             }
                         }
+
+                        cueIndex++;
                     }
+
                 }
 
                 acbFile.Rows[0]["AwbFile"] = null;
